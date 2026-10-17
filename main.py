@@ -289,10 +289,20 @@ async def incoming_private_message(client: Client, message: Message):
 
 
 async def run_web_healthcheck(port: int):
-    """Koyeb / Cloud uchun kichik HTTP health-check server."""
+    """Hugging Face / Cloud uchun HTTP health-check server."""
     from aiohttp import web
     async def health(request):
-        return web.Response(text="Pyrogram AI Userbot is running 24/7 on Cloud!")
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Telegram AI Userbot</title></head>
+        <body style="font-family:sans-serif; text-align:center; padding:50px; background:#f4f7f6;">
+            <h2>🤖 Telegram AI Userbot (Gemini 3.8 Flash)</h2>
+            <p style="color:green; font-weight:bold; font-size:18px;">✅ Status: Active & Running 24/7</p>
+        </body>
+        </html>
+        """
+        return web.Response(text=html_content, content_type="text/html")
 
     web_app = web.Application()
     web_app.router.add_get("/", health)
@@ -302,13 +312,13 @@ async def run_web_healthcheck(port: int):
     site = web.TCPSite(runner, "0.0.0.0", port)
     try:
         await site.start()
-        logger.info(f"🌐 Koyeb/Cloud Web Health-Check server port {port} da ishga tushdi.")
+        logger.info(f"🌐 Web Health-Check server port {port} da ishga tushdi.")
     except Exception as e:
         logger.warning(f"Web server ishga tushmadi: {e}")
 
 
 async def start_all():
-    port_env = os.getenv("PORT")
+    port_env = os.getenv("PORT", "7860")
     if port_env and port_env.isdigit():
         await run_web_healthcheck(int(port_env))
     await app.start()
