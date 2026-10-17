@@ -249,6 +249,7 @@ async def export_session_cmd(client: Client, message: Message):
 
 # 2) MANUAL SO'ROV BUYRUG'I (.ai <savol> yoki biror xabarga reply qilib .ai)
 @app.on_message(filters.me & filters.command("ai", prefixes=[".", "!", "/"]))
+@app.on_edited_message(filters.me & filters.command("ai", prefixes=[".", "!", "/"]))
 async def manual_ai_command(client: Client, message: Message):
     prompt = ""
     # Agar buyruqdan keyin matn yozilgan bo'lsa
