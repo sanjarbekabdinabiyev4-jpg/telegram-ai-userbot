@@ -54,11 +54,9 @@ MAX_HISTORY_LENGTH = 10  # Oxirgi 10 ta xabarni eslab qoladi
 # ─────────────────────────────────────────────────────────────
 
 async def query_gemini(prompt: str, history: List[dict] = None) -> str:
-    """Google Gemini API ga so'rov yuborish (aiohttp orqali to'liq asinxron)."""
+    """Google Gemini API ga so'rov yuborish (avtomatik model fallback bilan)."""
     if not GEMINI_API_KEY:
         return "❌ Xatolik: GEMINI_API_KEY o'rnatilmagan! .env faylini tekshiring."
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
     # Gemini formati bo'yicha suhbat tarixi
     contents = []
@@ -86,30 +84,53 @@ async def query_gemini(prompt: str, history: List[dict] = None) -> str:
         }
     }
 
-    try:
-        timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, json=payload) as response:
-                if response.status != 200:
+    # Quota xatosi (429) bo'lganda avtomatik almashtirish uchun modellar zanjiri
+    candidate_models = [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-flash-lite-latest",
+        GEMINI_MODEL
+    ]
+    seen = set()
+    models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+
+    last_error = ""
+    for model_name in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+        try:
+            timeout = aiohttp.ClientTimeout(total=20)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        candidates = result.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                return parts[0].get("text", "").strip()
+                        return "Bo'sh javob qaytdi."
+
                     err_data = await response.json()
-                    err_msg = err_data.get("error", {}).get("message", "Noma'lum xatolik")
-                    logger.error(f"Gemini API xatosi ({response.status}): {err_msg}")
-                    return f"❌ Gemini API xatosi: {err_msg}"
+                    err_msg = err_data.get("error", {}).get("message", f"Xatolik kodi: {response.status}")
+                    last_error = err_msg
 
-                result = await response.json()
-                candidates = result.get("candidates", [])
-                if not candidates:
-                    return "Javob olib bo'lmadi (bloklangan yoki bo'sh)."
+                    # Agar limit tugagan bo'lsa (429) yoki model vaqtincha ishlamasa, keyingi modelga o'tamiz
+                    if response.status in (429, 404, 503):
+                        logger.warning(f"⚠️ Model '{model_name}' limitga yetdi yoki band ({response.status}). Keyingi modelga o'tilmoqda...")
+                        continue
+                    else:
+                        logger.error(f"Gemini API xatosi ({response.status}): {err_msg}")
+                        return f"❌ Gemini API xatosi: {err_msg}"
+        except asyncio.TimeoutError:
+            logger.warning(f"⏱ Model '{model_name}' kechikdi, keyingisiga o'tilmoqda...")
+            continue
+        except Exception as e:
+            logger.error(f"Gemini so'rovida kutilmagan xatolik ({model_name}): {e}")
+            last_error = str(e)
+            continue
 
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    return parts[0].get("text", "").strip()
-                return "Bo'sh javob qaytdi."
-    except asyncio.TimeoutError:
-        return "⏱ Gemini serveri javob berishda kechikdi (Timeout)."
-    except Exception as e:
-        logger.error(f"Gemini so'rovida kutilmagan xatolik: {e}")
-        return f"❌ AI xatosi: {e}"
+    return f"❌ Gemini API limitiga yetdi: {last_error}"
 
 
 async def query_openai(prompt: str, history: List[dict] = None) -> str:
