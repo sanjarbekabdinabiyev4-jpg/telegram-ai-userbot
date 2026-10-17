@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import logging
 from typing import Dict, List
@@ -34,8 +35,8 @@ AUTO_REPLY_ENABLED = os.getenv("AUTO_REPLY_ENABLED", "True").lower() in ("true",
 # AI uchun umumiy yo'riqnoma (System prompt)
 SYSTEM_PROMPT = os.getenv(
     "SYSTEM_PROMPT",
-    "Siz Telegram foydalanuvchisi nomidan javob beruvchi aqlli va xushmuomala sun'iy intellektsiz. "
-    "Muloqotni samimiy, lo'nda va tabiiy insondek olib boring. O'zbek tilida javob bering."
+    "Siz Telegram foydalanuvchisi Sanjarbek nomidan javob beruvchi aqlli va xushmuomala sun'iy intellektsiz. "
+    "Profil egasining ismi Sanjarbek. Muloqotni samimiy, lo'nda va tabiiy insondek olib boring. O'zbek tilida javob bering."
 )
 
 # Logging
@@ -45,9 +46,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Suhbatlar xotirasi (Chat ID -> [{"role": "user"|"model", "text": "..."}])
-chat_histories: Dict[int, List[dict]] = {}
+# Suhbatlar xotirasi (Doimiy faylga saqlanadi, qayta yoqilganda ham eslab qoladi)
+MEMORY_FILE = "chat_memory.json"
 MAX_HISTORY_LENGTH = 10  # Oxirgi 10 ta xabarni eslab qoladi
+
+def load_memory() -> Dict[int, List[dict]]:
+    try:
+        if os.path.exists(MEMORY_FILE):
+            with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.warning(f"Xotira yuklashda xatolik: {e}")
+    return {}
+
+def save_memory(mem: Dict[int, List[dict]]):
+    try:
+        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(mem, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning(f"Xotira saqlashda xatolik: {e}")
+
+chat_histories: Dict[int, List[dict]] = load_memory()
 
 # ─────────────────────────────────────────────────────────────
 # 2. SUN'IY INTELLEKT (AI) BILAN ISHLASH FUNKSIYALARI
@@ -196,6 +216,7 @@ async def get_ai_response(chat_id: int, user_prompt: str) -> str:
         if len(history) > MAX_HISTORY_LENGTH * 2:
             history = history[-(MAX_HISTORY_LENGTH * 2):]
         chat_histories[chat_id] = history
+        save_memory(chat_histories)
 
     return reply
 
@@ -252,6 +273,7 @@ async def clear_history(client: Client, message: Message):
     chat_id = message.chat.id
     if chat_id in chat_histories:
         chat_histories[chat_id] = []
+        save_memory(chat_histories)
         await message.edit_text("🧹 Ushbu chatdagi AI xotirasi tozalandi.")
     else:
         await message.edit_text("ℹ️ Ushbu chat uchun xotira mavjud emas.")

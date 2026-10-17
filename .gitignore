@@ -12,3 +12,6 @@ __pycache__/
 
 # Log fayllari
 *.log
+
+# Chat xotirasi fayli
+chat_memory.json
