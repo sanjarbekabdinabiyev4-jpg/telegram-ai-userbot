@@ -189,7 +189,10 @@ async def send_chunked_message(client: Client, chat_id: int, text: str, reply_to
     # Uzun matnni bo'laklarga bo'lib yuborish
     chunks = [text[i:i + MAX_CHUNK] for i in range(0, len(text), MAX_CHUNK)]
     for chunk in chunks:
-        await client.send_message(chat_id=chat_id, text=chunk, reply_to_message_id=reply_to_message_id)
+        try:
+            await client.send_message(chat_id=chat_id, text=chunk, reply_to_message_id=reply_to_message_id)
+        except Exception:
+            await client.send_message(chat_id=chat_id, text=chunk, reply_to_message_id=reply_to_message_id, parse_mode=enums.ParseMode.DISABLED)
         reply_to_message_id = None  # Keyingi qismlarni reply qilmasdan ketma-ket yuborish
 
 
@@ -263,7 +266,13 @@ async def manual_ai_command(client: Client, message: Message):
     await client.send_chat_action(chat_id=message.chat.id, action=enums.ChatAction.TYPING)
 
     response = await get_ai_response(message.chat.id, prompt)
-    await message.edit_text(response)
+    try:
+        await message.edit_text(response)
+    except Exception:
+        try:
+            await message.edit_text(response, parse_mode=enums.ParseMode.DISABLED)
+        except Exception:
+            await client.send_message(message.chat.id, response, parse_mode=enums.ParseMode.DISABLED)
 
 
 # 3) KELGAN SHAXSIY XABARLARGA AVTOMATIK JAVOB BERISH
