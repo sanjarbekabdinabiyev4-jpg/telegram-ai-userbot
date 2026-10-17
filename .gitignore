@@ -1,0 +1,14 @@
+# Maxfiy ma'lumotlar va kalitlar
+.env
+
+# Telegram sessiya fayllari (Xavfsizlik uchun hech qachon GitHub ga yuklanmasligi kerak!)
+*.session
+*.session-journal
+
+# Python kesh fayllari
+__pycache__/
+*.pyc
+*.pyo
+
+# Log fayllari
+*.log
